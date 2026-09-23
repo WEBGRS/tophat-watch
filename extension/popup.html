@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px system-ui, sans-serif; width: 280px; margin: 12px; color: #111; }
+  button { width: 100%; padding: 10px; font-size: 15px; border: 0; border-radius: 6px; cursor: pointer; color: #fff; }
+  #toggle.on { background: #dc2626; } #toggle.off { background: #16a34a; }
+  #status { margin: 8px 0 12px; color: #555; }
+  label { display: block; margin-top: 8px; font-weight: 600; }
+  input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 4px; margin-top: 2px; }
+  .row { display: flex; gap: 6px; margin-top: 12px; }
+  .row button { background: #e5e7eb; color: #111; font-size: 13px; padding: 6px; }
+</style>
+</head>
+<body>
+  <button id="toggle" class="off">Start watching</button>
+  <div id="status"></div>
+  <label>Course IDs (comma separated)</label>
+  <input id="courses" type="text">
+  <label>ntfy topic (phone push, blank = off)</label>
+  <input id="ntfyTopic" type="text">
+  <label>Auto stop after (hours)</label>
+  <input id="autoStopHours" type="number" min="0.5" step="0.5">
+  <label><input id="sound" type="checkbox"> Alarm sound</label>
+  <div class="row"><button id="test">Test alert</button></div>
+  <script src="popup.js"></script>
+</body>
+</html>

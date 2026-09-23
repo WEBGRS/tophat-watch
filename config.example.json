@@ -1,0 +1,17 @@
+{
+  "courses": [
+    {
+      "name": "CS577",
+      "url": "https://app.tophat.com/e/<course-id>"
+    }
+  ],
+  "auto_discover": true,
+  "headless": true,
+  "poll_seconds": 3,
+  "reload_minutes": 45,
+  "ntfy_topic": "pick-a-long-random-topic",
+  "ntfy_server": "https://ntfy.sh",
+  "sound_repeats": 4,
+  "exclude_regex": "(Spring|Summer)\\s*20\\d\\d|20(1\\d|2[0-5])",
+  "auto_stop_hours": 3
+}

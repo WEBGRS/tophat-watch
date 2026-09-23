@@ -1,0 +1,9 @@
+config.json
+extension/local.json
+profile/
+logs/
+status.json
+seen.json
+watch.lock
+*.tmp
+__pycache__/
