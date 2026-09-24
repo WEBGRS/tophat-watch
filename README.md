@@ -1,34 +1,66 @@
-# tophat-watch
+# <img src="extension/icon128.png" width="40" align="left" alt=""> Top Hat Watch
 
-Alerts you when a Top Hat question or attendance session goes live, so you don't miss it.
+Get a desktop notification, a beep, and a phone push the moment a Top Hat question or attendance check goes live.
 
-A headless Chrome (Playwright) keeps each course's **Classroom** tab (`/e/<id>/lecture`) open and scans it every 2 s. When something shows up under *Questions & Attendance* you get:
+![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-no%20build%20step-F7DF1E?logo=javascript&logoColor=black)
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
 
-- a Windows toast plus an alarm sound
-- a push to your phone through [ntfy](https://ntfy.sh) (priority 5, which breaks through Do Not Disturb)
+<p>
+  <img src="docs/classroom.png" width="560" alt="Classroom tab with an unanswered question and the green Watch: ON pill">
+  <img src="docs/popup.png" width="240" alt="Toolbar popup listing the watched tab">
+</p>
 
-## Chrome extension (recommended)
+## Why
 
-`extension/` runs inside your everyday Chrome and watches whatever Top Hat course tabs you already have open. There are no course codes to enter.
+In a big lecture, Top Hat questions and attendance codes open without warning and close fast. If you're looking at your notes or another tab, you miss the points. This watches the Classroom tab for you and tells you right away.
 
-- Install: open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick the `extension` folder.
-- Use: open a course's **Classroom** tab (`app.tophat.com/e/<id>/lecture`) and leave it open. A pill in the bottom-left corner shows the state: green means watching, amber means you are on a non-Classroom page (only Top Hat's own new-question toast is visible there), and grey means paused.
-- Pause and resume from the pill, the toolbar popup, or **Alt+Shift+W**. Watching is on by default.
-- Alerts fire only for items that still need you: questions that are open and unanswered, and attendance you have not checked in to yet. Items marked `list-row--answered`, "Answered", or "Closed", and attendance once "You have been marked present" shows, are skipped. An item that becomes pending again alerts again.
-- Alert channels: a Chrome notification that stays until you dismiss it, a beep, and an ntfy push (set the topic in the popup, or in a gitignored `extension/local.json` as `{"ntfyTopic": "..."}`). Clicking the notification jumps to the tab.
+## Features
 
-## Python version
+- **No setup per course.** It watches whatever Top Hat course tabs you already have open.
+- **Only alerts when you need to act.** It skips answered or closed questions and attendance you've already checked in to. An item that opens again triggers another alert.
+- **Three alert channels:** a Chrome notification that stays until you dismiss it (click it to jump to the tab), a beep, and an optional [ntfy](https://ntfy.sh) push to your phone.
+- **On-page status pill:** green means watching, amber means you're on a page that isn't the Classroom tab, and grey means paused.
+- **Quick toggle:** pause and resume from the pill, the toolbar popup, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd>.
 
-Setup for the standalone Python watcher. It runs its own headless Chrome (about 1.4 GB of RAM).
+## Install (Chrome extension)
 
-### Setup
+1. Clone or download this repo.
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Click **Load unpacked** and select the `extension` folder.
+4. Open a course's **Classroom** tab (`app.tophat.com/e/<id>/lecture`) and leave it open.
 
-1. **Config:** copy `config.example.json` to `config.json` and set `ntfy_topic` to a long random string (anyone who knows the topic can read the pushes).
-2. **Phone:** install the *ntfy* app and subscribe to that topic.
-3. **First login:** `python watch.py --login` opens Chrome. Sign in with NetID and Duo. When the course list appears, the window closes and watching starts. The session is kept in `profile/`.
-4. **On/off:** run `toggle.ps1` (a desktop shortcut to it works well). It stops by itself after 3 h. `install-task.ps1` would register autostart at logon; it is not installed.
+### Phone push (optional)
 
-### Commands
+1. Install the **ntfy** app and subscribe to a topic. Pick a long random name: anyone who knows it can read your pushes.
+2. Enter that topic in the extension popup. To keep it out of git, you can instead put it in `extension/local.json` (this file is gitignored):
+
+   ```json
+   { "ntfyTopic": "your-long-random-topic" }
+   ```
+
+Click **Test alert** in the popup to check all three channels.
+
+## How it works
+
+A content script on `app.tophat.com` watches the page for DOM changes, with a rescan every 5 s as a backup. It reads the *Questions & Attendance* section of the Classroom tab and treats an item as pending unless it is marked `list-row--answered`, "Answered", or "Closed", or unless "You have been marked present" shows for attendance. On other Top Hat pages it falls back to Top Hat's own new-question toast. The service worker keeps track of which items have already alerted and sends the notifications. An offscreen document plays the sound.
+
+| Permission | Used for |
+|---|---|
+| `tabs`, host `app.tophat.com` | find open course tabs and read their Classroom list |
+| `notifications`, `offscreen` | desktop alert and alarm sound |
+| `storage`, `alarms` | settings and periodic checks |
+| host `ntfy.sh` | phone push; nothing is sent if no topic is set |
+
+No data leaves your browser except the ntfy push you configure.
+
+## Python version (standalone)
+
+`watch.py` does the same job with its own headless Chrome (Playwright, about 1.4 GB of RAM). Use it if you'd rather not keep Top Hat open in your own browser.
+
+1. Copy `config.example.json` to `config.json` and set `ntfy_topic`.
+2. Run `python watch.py --login` and sign in with NetID and Duo. The session is kept in `profile/`.
+3. Run `toggle.ps1` to turn it on or off. It stops by itself after 3 h.
 
 | Command | What it does |
 |---|---|
@@ -36,17 +68,15 @@ Setup for the standalone Python watcher. It runs its own headless Chrome (about 
 | `python watch.py` | starts watching (headless) |
 | `python watch.py --show` | starts watching with a visible browser |
 | `start.ps1` / `stop.ps1` | starts or stops it in the background |
+| `install-task.ps1` | registers autostart at logon (optional) |
 
-### Detection
+Along with the Classroom list, the Python version also watches for the new-question toast, an increase in the unanswered-count badge, and an auto-opened question form. Some of these selectors come from other open-source notifiers ([twangodev/tophat-bot](https://github.com/twangodev/tophat-bot), [AndrewW-coder/TopHatNotifier](https://github.com/AndrewW-coder/TopHatNotifier), [CSNBS/TopHat-Tracker](https://github.com/CSNBS/TopHat-Tracker)). It writes alerts to `logs/watch-*.log`. Raw WebSocket frames go to `logs/ws-*.log` in case Top Hat changes its UI and detection needs retuning.
 
-- Primary: any `<li>` under the *Questions & Attendance* section of the Classroom tab. Checked against the live DOM on 2026-09-22; the empty state is an empty `<ul>`.
-- Fallback: the "No questions or attendance sessions are being presented" text disappears, the new-question toast (`#tophat.new-question-item-notification`), an unanswered-count badge increase, or an auto-opened question form. These selectors come from open-source notifiers (twangodev/tophat-bot, AndrewW-coder/TopHatNotifier, CSNBS/TopHat-Tracker).
-- "Presenting started" sends a quiet notice when slides go up.
-- Login expiry sends a quiet notice telling you to run `--login` again.
+## Screenshots
 
-### Files
+`python docs/screenshots.py` rebuilds the images above. It loads the extension into Playwright Chromium and serves a mock Classroom page in place of `app.tophat.com`. It also checks that the extension really fires the question notification.
 
-- `logs/watch-YYYYMMDD.log`: alerts and errors
-- `logs/ws-YYYYMMDD.log`: raw WebSocket frames, kept for tuning detection if Top Hat changes its UI
-- `status.json`: heartbeat, written every poll
-- `seen.json`: IDs that have already alerted
+## Limits
+
+- Detection depends on Top Hat's current DOM (last checked 2026-09-22). A UI redesign can break it.
+- Chrome has to be running with the course tab open. Watched tabs are marked non-discardable so Chrome's memory saver doesn't unload them.
