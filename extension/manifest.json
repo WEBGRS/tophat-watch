@@ -1,23 +1,52 @@
 {
   "manifest_version": 3,
   "name": "Top Hat Watch",
-  "version": "1.1",
+  "version": "2.0",
   "description": "Alerts you when a Top Hat question or attendance session goes live.",
-  "permissions": ["notifications", "storage", "alarms", "offscreen", "tabs"],
-  "host_permissions": ["https://app.tophat.com/*", "https://ntfy.sh/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "notifications",
+    "storage",
+    "alarms",
+    "offscreen",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://app.tophat.com/*",
+    "https://ntfy.sh/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
-    { "matches": ["https://app.tophat.com/*"], "js": ["content.js"], "run_at": "document_idle" }
+    {
+      "matches": [
+        "https://app.tophat.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" }
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
-  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "commands": {
     "toggle": {
-      "suggested_key": { "default": "Alt+Shift+W" },
-      "description": "Turn watching on/off"
+      "suggested_key": {
+        "default": "Alt+Shift+W"
+      },
+      "description": "Pause/resume alerts"
     }
   }
 }

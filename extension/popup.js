@@ -1,34 +1,35 @@
-// Popup: on/off switch and settings
-const DEFAULTS = { on: false, courses: '', ntfyTopic: '', autoStopHours: 3, sound: true, startedAt: 0 };
+// Popup: pause switch, watched tabs, settings
+const DEFAULTS = { enabled: true, ntfyTopic: '', sound: true };
 const $ = id => document.getElementById(id);
 
 async function render() {
   let local = {};
   try { local = await (await fetch(chrome.runtime.getURL('local.json'))).json(); } catch {}
   const c = { ...DEFAULTS, ...local, ...(await chrome.storage.local.get(null)) };
-  $('toggle').className = c.on ? 'on' : 'off';
-  $('toggle').textContent = c.on ? 'Stop watching' : 'Start watching';
-  if (c.on) {
-    const end = new Date(c.startedAt + c.autoStopHours * 3600e3);
-    $('status').textContent = `Watching since ${new Date(c.startedAt).toLocaleTimeString()}, auto stop ${end.toLocaleTimeString()}`;
-  } else {
-    $('status').textContent = 'Off. Shortcut: Alt+Shift+W';
+  $('toggle').className = c.enabled ? 'on' : 'off';
+  $('toggle').textContent = c.enabled ? 'Watching - click to pause' : 'Paused - click to resume';
+  const tabs = await chrome.tabs.query({ url: 'https://app.tophat.com/e/*' });
+  const ul = $('tabs');
+  ul.textContent = '';
+  for (const t of tabs) {
+    const li = document.createElement('li');
+    const lecture = /\/e\/\d+\/lecture/.test(t.url);
+    li.textContent = (t.title || t.url).replace(/\s*\|\s*Top Hat$/, '') + (lecture ? '' : '  (not Classroom tab)');
+    ul.appendChild(li);
   }
-  $('courses').value = c.courses;
+  $('status').textContent = tabs.length
+    ? `Watching ${tabs.length} open Top Hat tab(s). Shortcut: Alt+Shift+W`
+    : 'No Top Hat course tab open. Open a course\'s Classroom tab to watch it.';
   $('ntfyTopic').value = c.ntfyTopic;
-  $('autoStopHours').value = c.autoStopHours;
   $('sound').checked = c.sound;
 }
 
 $('toggle').onclick = async () => {
-  $('toggle').disabled = true;
-  await chrome.runtime.sendMessage({ type: 'toggle' });
-  $('toggle').disabled = false;
+  const { enabled } = await chrome.storage.local.get('enabled');
+  await chrome.storage.local.set({ enabled: enabled === false });
   render();
 };
 $('test').onclick = () => chrome.runtime.sendMessage({ type: 'test' });
-for (const id of ['courses', 'ntfyTopic', 'autoStopHours']) {
-  $(id).onchange = () => chrome.storage.local.set({ [id]: id === 'autoStopHours' ? Number($(id).value) || 3 : $(id).value.trim() });
-}
+$('ntfyTopic').onchange = () => chrome.storage.local.set({ ntfyTopic: $('ntfyTopic').value.trim() });
 $('sound').onchange = () => chrome.storage.local.set({ sound: $('sound').checked });
 render();

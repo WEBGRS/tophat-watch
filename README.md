@@ -9,12 +9,13 @@ A headless Chrome (Playwright) keeps each course's **Classroom** tab (`/e/<id>/l
 
 ## Chrome extension (recommended)
 
-`extension/` does the same job inside your everyday Chrome, so it reuses your Top Hat login and needs no second browser.
+`extension/` runs inside your everyday Chrome and watches whatever Top Hat course tabs you already have open. There are no course codes to enter.
 
 - Install: open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick the `extension` folder.
-- Settings: open the popup and enter your course IDs (the number in `app.tophat.com/e/<id>`) and an ntfy topic. Defaults can also go in a gitignored `extension/local.json`, e.g. `{"courses": "123456, 654321", "ntfyTopic": "my-secret-topic"}`.
-- Turn it on or off from the toolbar icon or with **Alt+Shift+W**. Turning it on opens pinned Classroom tabs; turning it off closes them. It stops by itself after 3 h.
-- Alerts: a Chrome notification that stays until you dismiss it, a beep, and an ntfy push. Clicking the notification jumps to the course tab.
+- Use: open a course's **Classroom** tab (`app.tophat.com/e/<id>/lecture`) and leave it open. A pill in the bottom-left corner shows the state: green means watching, amber means you are on a non-Classroom page (only Top Hat's own new-question toast is visible there), and grey means paused.
+- Pause and resume from the pill, the toolbar popup, or **Alt+Shift+W**. Watching is on by default.
+- Alerts fire only for items that still need you: questions that are open and unanswered, and attendance you have not checked in to yet. Items marked `list-row--answered`, "Answered", or "Closed", and attendance once "You have been marked present" shows, are skipped. An item that becomes pending again alerts again.
+- Alert channels: a Chrome notification that stays until you dismiss it, a beep, and an ntfy push (set the topic in the popup, or in a gitignored `extension/local.json` as `{"ntfyTopic": "..."}`). Clicking the notification jumps to the tab.
 
 ## Python version
 
