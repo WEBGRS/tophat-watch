@@ -12,6 +12,8 @@
   input[type=text] { width: 100%; box-sizing: border-box; padding: 4px; margin-top: 2px; }
   .row { display: flex; gap: 6px; margin-top: 12px; }
   .row button { background: #e5e7eb; color: #111; font-size: 13px; padding: 6px; }
+  #pushes { margin: 4px 0 0; padding-left: 16px; color: #555; font-size: 12px; }
+  #pushes li { word-break: break-all; }
 </style>
 </head>
 <body>
@@ -20,7 +22,10 @@
   <ul id="tabs"></ul>
   <label>ntfy topic (phone push, blank = off)</label>
   <input id="ntfyTopic" type="text">
-  <label><input id="sound" type="checkbox"> Alarm sound</label>
+  <label><input id="sound" type="checkbox"> Chime sound</label>
+  <label><input id="pushAlerts" type="checkbox"> Alert on any instructor push</label>
+  <label>Recent server pushes</label>
+  <ul id="pushes"></ul>
   <div class="row"><button id="test">Test alert</button></div>
   <script src="popup.js"></script>
 </body>

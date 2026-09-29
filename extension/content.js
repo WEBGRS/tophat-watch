@@ -32,6 +32,13 @@
       sections++;
       if (/question|attendance/i.test(title)) lis.forEach(li => items.push(itemState(li, body)));
       else if (/present/i.test(title)) presenting = lis.length ? lis.map(l => l.innerText.trim()).join(' / ').slice(0, 120) : null;
+      else lis.forEach(li => {
+        // Any other section: new entries count as instructor pushes
+        const idAttr = (li.querySelector('[data-click-id^="tree item"]') || {}).getAttribute?.('data-click-id') || '';
+        const text = li.innerText.trim().split('\n')[0].slice(0, 120);
+        const id = (idAttr.match(/tree item (\d+)/) || [])[1] || text;
+        if (id) items.push({ id: 'item:' + id, text: `${title}: ${text}`, kind: 'content', pending: false, raw: title });
+      });
     });
     // Non-Classroom pages: Top Hat's own "new question" toast
     const toast = document.getElementById('tophat.new-question-item-notification');
@@ -61,6 +68,18 @@
   }
 
   if (/^\/login/.test(location.pathname)) send({ type: 'login', url: location.href });
+
+  // Server pushes relayed from ws-hook.js (page world)
+  const loadedAt = Date.now();
+  window.addEventListener('message', e => {
+    if (e.source !== window || !e.data || e.data.__thw !== 'push') return;
+    const m = location.pathname.match(COURSE);
+    if (!m) return;
+    const { host, type, event, sample } = e.data;
+    // Frames in the first seconds are initial state, not new pushes
+    send({ type: 'push', course: m[1], name: courseName(), url: location.href,
+      push: { host, type, event, sample }, warmup: Date.now() - loadedAt < 8000 });
+  });
 
   let timer;
   new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(report, 300); })

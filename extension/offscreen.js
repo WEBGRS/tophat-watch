@@ -1,16 +1,18 @@
-// Alarm beeps via WebAudio
+// Soft two-note chime via WebAudio
 chrome.runtime.onMessage.addListener(m => {
   if (m.type !== 'beep') return;
   const ctx = new AudioContext();
-  for (let i = 0; i < 6; i++) {
+  [659, 880].forEach((f, i) => {
     const o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = 'square';
-    o.frequency.value = i % 2 ? 660 : 880;
-    g.gain.value = 0.25;
+    o.type = 'sine';
+    o.frequency.value = f;
+    const t = ctx.currentTime + i * 0.18;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.08, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
     o.connect(g).connect(ctx.destination);
-    const t = ctx.currentTime + i * 0.35;
     o.start(t);
-    o.stop(t + 0.25);
-  }
-  setTimeout(() => ctx.close(), 3000);
+    o.stop(t + 1);
+  });
+  setTimeout(() => ctx.close(), 2000);
 });

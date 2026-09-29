@@ -4,6 +4,8 @@ const DEFAULTS = {
   ntfyTopic: '',
   ntfyServer: 'https://ntfy.sh',
   sound: true,
+  pushAlerts: true,
+  pushCooldownSec: 90,
 };
 
 // Optional gitignored overrides in local.json
@@ -24,6 +26,7 @@ async function handleScan(msg, tabId) {
   const key = `${tabId}:${msg.course}`;
   const { st = {} } = await chrome.storage.session.get('st');
   const s = st[key] || { alerted: {}, presenting: null };
+  s.known = s.known || {};
   if (tabId != null) chrome.tabs.update(tabId, { autoDiscardable: false }).catch(() => {});
 
   const reasons = [];
@@ -37,17 +40,64 @@ async function handleScan(msg, tabId) {
   const pendingIds = new Set(msg.r.items.filter(i => i.pending).map(i => i.id));
   for (const id of Object.keys(s.alerted)) if (!pendingIds.has(id)) delete s.alerted[id];
 
-  const presentingStarted = msg.r.presenting && !s.presenting;
+  const wasBaselined = !!s.baselined;
+  // New entries in other sections (baseline on first scan)
+  for (const it of msg.r.items) {
+    if (it.kind !== 'content' || s.known[it.id]) continue;
+    s.known[it.id] = Date.now();
+    if (s.baselined) reasons.push('NEW: ' + it.text);
+  }
+  if (msg.r.sections) s.baselined = true;
+
+  const presentingChanged = wasBaselined && msg.r.presenting && msg.r.presenting !== s.presenting;
   s.presenting = msg.r.presenting;
   st[key] = s;
   await chrome.storage.session.set({ st });
   await updateBadge(st);
 
   if (!c.enabled) return;
-  if (presentingStarted) notify(`${msg.name}: presenting started`, msg.r.presenting, tabId, false, false);
-  if (reasons.length) {
-    notify(`Top Hat question - ${msg.name}`, [...new Set(reasons)].join(' | ').slice(0, 300), tabId, true, true);
+  if (presentingChanged) {
+    await markAlert(msg.course);
+    notify(`Top Hat presenting - ${msg.name}`, msg.r.presenting, tabId, true, true);
   }
+  if (reasons.length) {
+    await markAlert(msg.course);
+    const what = reasons.every(r => r.startsWith('NEW: ')) ? 'new item' : 'question';
+    notify(`Top Hat ${what} - ${msg.name}`, [...new Set(reasons)].join(' | ').slice(0, 300), tabId, true, true);
+  }
+}
+
+async function markAlert(course) {
+  const { lastAlert = {} } = await chrome.storage.session.get('lastAlert');
+  lastAlert[course] = Date.now();
+  await chrome.storage.session.set({ lastAlert });
+}
+
+// Any server push (WebSocket frame) from the instructor side
+async function handlePush(msg, tabId) {
+  const p = msg.push;
+  const { pushLog = [] } = await chrome.storage.local.get('pushLog');
+  pushLog.unshift({ t: Date.now(), course: msg.name, warmup: !!msg.warmup, ...p });
+  await chrome.storage.local.set({ pushLog: pushLog.slice(0, 40) });
+  if (msg.warmup) return;
+  const c = await cfg();
+  if (!c.enabled || !c.pushAlerts) return;
+
+  // Same kind of push within cooldown stays quiet (e.g. slide flips)
+  const key = `${msg.course}|${p.type}|${p.event}`;
+  const { pushSeen = {} } = await chrome.storage.session.get('pushSeen');
+  const now = Date.now();
+  const recent = pushSeen[key] && now - pushSeen[key] < c.pushCooldownSec * 1000;
+  pushSeen[key] = now;
+  await chrome.storage.session.set({ pushSeen });
+  if (recent) return;
+
+  // Skip if the DOM scan already alerted for this course
+  const { lastAlert = {} } = await chrome.storage.session.get('lastAlert');
+  if (lastAlert[msg.course] && Date.now() - lastAlert[msg.course] < 8000) return;
+  await markAlert(msg.course);
+  const what = p.event ? `${p.type} / ${p.event}` : p.type;
+  notify(`Top Hat push - ${msg.name}`, `Instructor pushed something (${what}). Check the tab.`, tabId, true, true);
 }
 
 async function updateBadge(st) {
@@ -70,7 +120,7 @@ async function handleLogin(tabId) {
 async function notify(title, message, tabId, loud, push) {
   const c = await cfg();
   const id = await chrome.notifications.create({
-    type: 'basic', iconUrl: 'icon128.png', title, message, priority: 2, requireInteraction: loud,
+    type: 'basic', iconUrl: 'icon128.png', title, message, priority: 1, requireInteraction: false,
   });
   if (tabId != null) {
     const { clicks = {} } = await chrome.storage.session.get('clicks');
@@ -85,8 +135,8 @@ async function notify(title, message, tabId, loud, push) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        topic: c.ntfyTopic, title, message, priority: loud ? 5 : 3,
-        tags: ['rotating_light'], ...(url ? { click: url } : {}),
+        topic: c.ntfyTopic, title, message, priority: 3,
+        tags: ['bell'], ...(url ? { click: url } : {}),
       }),
     }).catch(e => console.warn('ntfy failed', e));
   }
@@ -117,6 +167,8 @@ chrome.notifications.onClicked.addListener(async id => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   const tabId = sender.tab ? sender.tab.id : null;
   if (msg.type === 'scan') queue = queue.then(() => handleScan(msg, tabId)).catch(console.error);
+  // Delay so the DOM scan (more specific) gets to alert first
+  else if (msg.type === 'push') setTimeout(() => { queue = queue.then(() => handlePush(msg, tabId)).catch(console.error); }, 3000);
   else if (msg.type === 'login') handleLogin(tabId);
   else if (msg.type === 'test') notify('Top Hat Watch test', 'If you see/hear this, alerts work.', null, true, true);
 });

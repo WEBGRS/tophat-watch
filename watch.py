@@ -114,7 +114,7 @@ def toast(title, body):
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 $x = New-Object Windows.Data.Xml.Dom.XmlDocument
-$x.LoadXml('<toast scenario="urgent"><visual><binding template="ToastGeneric"><text>{esc(title)}</text><text>{esc(body)}</text></binding></visual><audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="false"/></toast>')
+$x.LoadXml('<toast><visual><binding template="ToastGeneric"><text>{esc(title)}</text><text>{esc(body)}</text></binding></visual><audio silent="true"/></toast>')
 $appId = '{{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}}\\WindowsPowerShell\\v1.0\\powershell.exe'
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show([Windows.UI.Notifications.ToastNotification]::new($x))
 """
@@ -123,19 +123,16 @@ $appId = '{{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}}\\WindowsPowerShell\\v1.0\\pow
                      creationflags=subprocess.CREATE_NO_WINDOW)
 
 
-def beep(repeats):
-    def run():
-        for _ in range(repeats):
-            winsound.PlaySound("SystemHand", winsound.SND_ALIAS)
-            time.sleep(0.4)
-    threading.Thread(target=run, daemon=True).start()
+def beep():
+    # Single soft system chime
+    threading.Thread(target=winsound.PlaySound, args=("SystemAsterisk", winsound.SND_ALIAS), daemon=True).start()
 
 
-def ntfy(cfg, title, body, url=None, priority=5):
+def ntfy(cfg, title, body, url=None, priority=3):
     topic = cfg.get("ntfy_topic")
     if not topic:
         return
-    payload = {"topic": topic, "title": title, "message": body, "priority": priority, "tags": ["rotating_light"]}
+    payload = {"topic": topic, "title": title, "message": body, "priority": priority, "tags": ["bell"]}
     if url:
         payload["click"] = url
     try:
@@ -150,8 +147,8 @@ def alert(cfg, title, body, url=None, loud=True):
     log(f"ALERT {title} | {body}")
     toast(title, body)
     if loud:
-        beep(cfg.get("sound_repeats", 4))
-    threading.Thread(target=ntfy, args=(cfg, title, body, url, 5 if loud else 3), daemon=True).start()
+        beep()
+    threading.Thread(target=ntfy, args=(cfg, title, body, url), daemon=True).start()
 
 
 # ---------- browser ----------
@@ -220,6 +217,9 @@ class Tab:
         self.empty_since = None
         self.presenting = None
         self.empty_gone = False
+        self.last_alert = 0
+        self.pushes = []
+        self.push_seen = {}
 
 
 def course_list(cfg, ctx):
@@ -283,8 +283,9 @@ def check_tab(cfg, tab, seen):
             reasons.append("question opened on screen")
         if r["count"] is not None and tab.count is not None and r["count"] > tab.count:
             reasons.append(f"unanswered count {tab.count} -> {r['count']}")
-        if r["presenting"] and not tab.presenting:
-            alert(cfg, f"Top Hat {tab.name}: presenting started", r["presenting"], tab.url, loud=False)
+        if r["presenting"] and r["presenting"] != tab.presenting:
+            tab.last_alert = time.time()
+            alert(cfg, f"Top Hat presenting - {tab.name}", r["presenting"], tab.url)
     if r["emptyGone"] and not tab.empty_gone and not any(i["id"].startswith("live:") for i in r["items"]):
         reasons.append("something is live in Questions & Attendance")
     tab.toast, tab.form, tab.count = r["toast"], r["form"], r["count"]
@@ -292,8 +293,10 @@ def check_tab(cfg, tab, seen):
     tab.baselined = tab.baselined or bool(r["tree"])
 
     if reasons:
+        tab.last_alert = time.time()
         alert(cfg, f"Top Hat question - {tab.name}", " | ".join(dict.fromkeys(reasons))[:300], tab.url)
         save_json(SEEN_FILE, seen)
+    flush_pushes(cfg, tab)
 
     # Page never rendered course content: reload periodically
     if not r["tree"]:
@@ -326,8 +329,8 @@ def watch(cfg, show):
         tabs = []
         for url, name in courses.items():
             page = ctx.new_page()
-            page.on("websocket", lambda ws, n=name: ws.on("framereceived", lambda f, n=n: ws_log(n, f)))
             tab = Tab(name, url, page)
+            page.on("websocket", lambda ws, t=tab: ws.on("framereceived", lambda f, t=t: on_frame(cfg, t, f)))
             reload(tab)
             tabs.append(tab)
         for p in initial:
@@ -347,6 +350,94 @@ def watch(cfg, show):
                                     "tabs": {t.name: {"url": t.page.url, "logged_out": t.logged_out,
                                                       "baselined": t.baselined, "count": t.count} for t in tabs}})
             time.sleep(cfg.get("poll_seconds", 2))
+
+
+WS_NOISE = re.compile(r"^(pong|ping|heartbeat|register-ok|ack|connected|welcome)$", re.I)
+META_NOISE = re.compile(r"authori[sz]e|subscri|register|connect|ping|pong", re.I)
+
+
+def push_events(text):
+    """Server frames that are real pushes, as (type, event) pairs."""
+    if not text or text in ("o", "h") or text[0] == "c":
+        return []
+    raw = []
+    if text[0] == "a":
+        try:
+            raw = json.loads(text[1:])
+        except ValueError:
+            return []
+    elif text[0] == "m":
+        try:
+            raw = [json.loads(text[1:])]
+        except ValueError:
+            return []
+    else:
+        m = re.match(r"^(\d+)(.*)$", text, re.S)
+        if m:
+            # Socket.IO: only 42/43 carry events
+            if not m.group(1).startswith(("42", "43")):
+                return []
+            try:
+                a = json.loads(m.group(2))
+                raw = [{"type": a[0], "data": a[1] if len(a) > 1 else {}}] if isinstance(a, list) else [a]
+            except ValueError:
+                return []
+        else:
+            raw = [text]
+    out = []
+    for f in raw:
+        o = f
+        if isinstance(f, str):
+            try:
+                o = json.loads(f)
+            except ValueError:
+                o = {"type": "raw"}
+        if not isinstance(o, dict):
+            continue
+        typ = str(o.get("type") or o.get("event") or o.get("name") or "unknown")
+        d = o.get("data") if isinstance(o.get("data"), dict) else {}
+        ev = str(d.get("event") or d.get("type") or d.get("action") or "")
+        if WS_NOISE.match(typ):
+            continue
+        if typ.lower() == "meta" and ("auth" in d or META_NOISE.search(ev)):
+            continue
+        out.append((typ, ev))
+    return out
+
+
+def on_frame(cfg, tab, frame):
+    ws_log(tab.name, frame)
+    try:
+        text = frame if isinstance(frame, str) else frame.decode("utf-8", "replace")
+    except Exception:
+        return
+    # Frames right after (re)load are initial state
+    if time.time() - tab.last_reload < 8:
+        return
+    for ev in push_events(text):
+        tab.pushes.append((time.time(), ev))
+
+
+def flush_pushes(cfg, tab):
+    """Alert on queued server pushes; DOM alerts win, same kind stays quiet within cooldown."""
+    if not cfg.get("push_alerts", True):
+        tab.pushes.clear()
+        return
+    now = time.time()
+    ready = [p for p in tab.pushes if now - p[0] >= 3]
+    tab.pushes = [p for p in tab.pushes if now - p[0] < 3]
+    cool = cfg.get("push_cooldown_seconds", 90)
+    fresh = []
+    for t, ev in ready:
+        last = tab.push_seen.get(ev)
+        tab.push_seen[ev] = t
+        if last is None or t - last >= cool:
+            fresh.append(ev)
+    if not fresh or now - tab.last_alert < 8:
+        return
+    tab.last_alert = now
+    what = ", ".join(dict.fromkeys(f"{a} / {b}" if b else a for a, b in fresh))
+    alert(cfg, f"Top Hat push - {tab.name}", f"Instructor pushed something ({what}). Check the tab.", tab.url)
 
 
 def ws_log(name, frame):

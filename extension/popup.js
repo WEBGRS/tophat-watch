@@ -1,5 +1,5 @@
 // Popup: pause switch, watched tabs, settings
-const DEFAULTS = { enabled: true, ntfyTopic: '', sound: true };
+const DEFAULTS = { enabled: true, ntfyTopic: '', sound: true, pushAlerts: true };
 const $ = id => document.getElementById(id);
 
 async function render() {
@@ -22,6 +22,17 @@ async function render() {
     : 'No Top Hat course tab open. Open a course\'s Classroom tab to watch it.';
   $('ntfyTopic').value = c.ntfyTopic;
   $('sound').checked = c.sound;
+  $('pushAlerts').checked = c.pushAlerts;
+  const pl = $('pushes');
+  pl.textContent = '';
+  for (const p of (c.pushLog || []).slice(0, 6)) {
+    const li = document.createElement('li');
+    const t = new Date(p.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    li.textContent = `${t} ${p.course}: ${p.type}${p.event ? ' / ' + p.event : ''}${p.warmup ? ' (on load)' : ''}`;
+    li.title = p.sample || '';
+    pl.appendChild(li);
+  }
+  if (!pl.children.length) pl.innerHTML = '<li>none yet</li>';
 }
 
 $('toggle').onclick = async () => {
@@ -32,4 +43,5 @@ $('toggle').onclick = async () => {
 $('test').onclick = () => chrome.runtime.sendMessage({ type: 'test' });
 $('ntfyTopic').onchange = () => chrome.storage.local.set({ ntfyTopic: $('ntfyTopic').value.trim() });
 $('sound').onchange = () => chrome.storage.local.set({ sound: $('sound').checked });
+$('pushAlerts').onchange = () => chrome.storage.local.set({ pushAlerts: $('pushAlerts').checked });
 render();
