@@ -19,7 +19,7 @@ In a big lecture, Top Hat questions and attendance codes open without warning an
 
 - **No setup per course.** It watches whatever Top Hat course tabs you already have open.
 - **Catches every instructor push.** It listens to Top Hat's own live-update WebSocket, so anything the server pushes to your tab raises an alert, even if the page doesn't change in a way the scanner recognizes. Repeats of the same push type within 90 s (for example slide flips) stay quiet.
-- **Specific alerts when it can.** Open questions and attendance get their own alert with the question title; answered or closed items and attendance you've already checked in to are skipped. Changes under *Presenting* and new entries in other sections alert too.
+- **Specific alerts when it can.** Open questions and attendance get their own alert with the question title; answered or closed items and attendance you've already checked in to are skipped. Changes under *Presenting* and new entries in other sections alert too. Discussions (such as a Lecture Backchannel) and classmates' posts and upvotes in them never alert.
 - **Three low-key channels:** a Chrome notification that fades on its own (click it to jump to the tab), a soft two-note chime, and an optional [ntfy](https://ntfy.sh) push to your phone at normal priority. No alarm sounds.
 - **On-page status pill:** green means watching, amber means you're on a page that isn't the Classroom tab, and grey means paused.
 - **Quick toggle:** pause and resume from the pill, the toolbar popup, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd>.

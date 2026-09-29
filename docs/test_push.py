@@ -19,7 +19,12 @@ window.addQ = () => document.getElementById('q').innerHTML =
    <div data-click-id="tree item 42 details title">Pick the recurrence</div>
    <div data-click-id="tree item 42 details subtext">Unanswered</div></div></li>`;
 window.addM = () => document.getElementById('m').insertAdjacentHTML('beforeend', '<li>Worksheet 3</li>');
-window.setP = t => document.getElementById('p').innerHTML = `<li>${t}</li>`;
+window.addD = () => document.getElementById('q').insertAdjacentHTML('beforeend',
+  `<li><div class="list-row list-row--unanswered" data-click-id="tree item 77 container">
+   <svg data-testid="DiscussionIcon"></svg>
+   <span data-click-id="tree item 77 details title">Lecture Backchannel</span>
+   <span id="label-item-77">current: discussion, Lecture Backchannel</span></div></li>`);
+window.setP =t => document.getElementById('p').innerHTML = `<li>${t}</li>`;
 </script>"""
 
 
@@ -67,6 +72,11 @@ with sync_playwright() as p:
     page.wait_for_timeout(5000)
     ws.send(frame({"type": "item", "data": {"event": "published"}}))         # 3: new material (push deduped)
     page.evaluate("addM()")
+    page.wait_for_timeout(5000)
+    # Discussion item + classmate posts (real frame shape): must stay silent
+    page.evaluate("addD()")
+    for ev in ("discussion:response:added", "discussion:response:updated"):
+        ws.send(frame({"type": "message", "data": {"auth": False, "event": ev, "payload": {"discussion": 77}}}))
     page.wait_for_timeout(5000)
     page.evaluate("setP('Lecture 5 - Poll 2')")                              # 4: presenting changed
     page.wait_for_timeout(5000)

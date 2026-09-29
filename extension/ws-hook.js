@@ -4,6 +4,8 @@
   window.__thwHooked = true;
   const NOISE = /^(pong|ping|heartbeat|register-ok|ack|connected|welcome)$/i;
   const META_NOISE = /authori[sz]e|subscri|register|connect|ping|pong/i;
+  // Classmate activity (discussion posts/upvotes), not instructor pushes
+  const STUDENT_NOISE = /^discussion:/i;
   const THIRD_PARTY = /intercom|pendo|segment|sentry|fullstory|hotjar|launchdarkly|walkme|datadog|newrelic/i;
 
   // SockJS: o=open, h=heartbeat, a[...]=messages, m"..."=single, c[...]=close
@@ -29,7 +31,7 @@
       const type = String(o.type || o.event || o.name || 'unknown');
       const d = o.data && typeof o.data === 'object' ? o.data : {};
       const event = String(d.event || d.type || d.action || '');
-      if (NOISE.test(type)) continue;
+      if (NOISE.test(type) || STUDENT_NOISE.test(event)) continue;
       if (/^meta$/i.test(type) && (d.auth !== undefined || META_NOISE.test(event))) continue;
       window.postMessage({ __thw: 'push', host, type, event, sample: JSON.stringify(o).slice(0, 500) }, location.origin);
     }

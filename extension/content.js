@@ -10,12 +10,13 @@
     const title = ((li.querySelector('[data-click-id$="details title"]') || {}).innerText || '').trim();
     const sub = ((li.querySelector('[data-click-id$="details subtext"]') || {}).innerText || '').trim();
     const all = `${label} | ${sub}`.toLowerCase();
-    const kind = /attendance/i.test(label + title) ? 'attendance' : 'question';
-    let pending = true;
+    const discussion = !!li.querySelector('[data-testid="DiscussionIcon"]') || /^current: discussion\b/i.test(label);
+    const kind = discussion ? 'discussion' : /attendance/i.test(label + title) ? 'attendance' : 'question';
+    let pending = !discussion;
     if (row.classList.contains('list-row--answered')) pending = false;
     if (/\b(answered|submitted|complete[d]?|present|checked in)\b/.test(all.replace(/unanswered/g, ''))) pending = false;
     if (/\bclosed\b/.test(all)) pending = false;
-    if (row.classList.contains('list-row--unanswered')) pending = true;
+    if (row.classList.contains('list-row--unanswered') && !discussion) pending = true;
     if (kind === 'attendance' && /marked present|attendance has been (recorded|updated)/i.test(body)) pending = false;
     const idAttr = (li.querySelector('[data-click-id^="tree item"]') || {}).getAttribute?.('data-click-id') || '';
     const id = (idAttr.match(/tree item (\d+)/) || [])[1] || title || label;

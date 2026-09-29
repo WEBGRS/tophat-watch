@@ -28,14 +28,17 @@ SCAN_JS = r"""
 () => {
   const items = [];
   const push = (id, text, kind) => items.push({id, text: (text || '').trim().replace(/\s*\n\s*/g, ' / ').slice(0, 200), kind});
-  let sections = 0, presenting = null;
+  // Discussions (e.g. Lecture Backchannel) are classmate chat, never alert
+  const isDisc = el => !!el.querySelector('[data-testid="DiscussionIcon"]');
+  let sections = 0, presenting = null, onlyDisc = false;
   document.querySelectorAll('[class*="StudentContentTreestyles__Section-"]').forEach(sec => {
     const title = ((sec.querySelector('[class*="SectionTitle"]') || {}).innerText || '').trim();
     let lis = [...sec.querySelectorAll('[class*="SectionList"] > li')];
     if (!lis.length) lis = [...sec.querySelectorAll('[role="treeitem"]')];
     sections++;
     if (/question|attendance/i.test(title)) {
-      lis.forEach(li => {
+      onlyDisc = lis.length > 0 && lis.every(isDisc);
+      lis.filter(li => !isDisc(li)).forEach(li => {
         const label = li.getAttribute('aria-label') || (li.querySelector('[aria-label]') || {getAttribute: () => ''}).getAttribute('aria-label') || '';
         const text = label || li.innerText;
         push('live:' + (li.id || (li.querySelector('[id]') || {}).id || text), text, /attendance/i.test(text) ? 'attendance' : 'question');
@@ -45,7 +48,7 @@ SCAN_JS = r"""
     }
   });
   const body = document.body ? document.body.innerText : '';
-  const emptyGone = sections > 0 && !/No questions or attendance sessions are being presented/i.test(body);
+  const emptyGone = sections > 0 && !onlyDisc && !/No questions or attendance sessions are being presented/i.test(body);
   document.querySelectorAll('[data-testid="QuestionIcon"]').forEach(icon => {
     const row = icon.closest('[data-hotkey-id="list-item"]') || icon.closest('li');
     if (!row) return;
@@ -57,7 +60,7 @@ SCAN_JS = r"""
     const text = t ? t.innerText : row.innerText;
     push('q:' + (c ? c.getAttribute('data-click-id') : text), text, 'question');
   });
-  document.querySelectorAll('.list-row--unanswered').forEach(r => push('legacy:' + r.innerText.slice(0, 120), r.innerText, 'question'));
+  document.querySelectorAll('.list-row--unanswered').forEach(r => !isDisc(r) && push('legacy:' + r.innerText.slice(0, 120), r.innerText, 'question'));
   const toast = document.getElementById('tophat.new-question-item-notification');
   const badge = document.querySelector('span[class*="UnansweredCountBadge"], span[class*="UnansweredQuestionCount"]');
   const n = badge ? parseInt(badge.innerText, 10) : NaN;
@@ -354,6 +357,8 @@ def watch(cfg, show):
 
 WS_NOISE = re.compile(r"^(pong|ping|heartbeat|register-ok|ack|connected|welcome)$", re.I)
 META_NOISE = re.compile(r"authori[sz]e|subscri|register|connect|ping|pong", re.I)
+# Classmate activity (discussion posts/upvotes), not instructor pushes
+STUDENT_NOISE = re.compile(r"^discussion:", re.I)
 
 
 def push_events(text):
@@ -397,7 +402,7 @@ def push_events(text):
         typ = str(o.get("type") or o.get("event") or o.get("name") or "unknown")
         d = o.get("data") if isinstance(o.get("data"), dict) else {}
         ev = str(d.get("event") or d.get("type") or d.get("action") or "")
-        if WS_NOISE.match(typ):
+        if WS_NOISE.match(typ) or STUDENT_NOISE.match(ev):
             continue
         if typ.lower() == "meta" and ("auth" in d or META_NOISE.search(ev)):
             continue
