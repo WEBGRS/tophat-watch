@@ -20,6 +20,7 @@ async function cfg() {
 // ---------- alert logic ----------
 
 let queue = Promise.resolve();
+const FORGET_MS = 3 * 60 * 1000;
 
 async function handleScan(msg, tabId) {
   const c = await cfg();
@@ -36,9 +37,14 @@ async function handleScan(msg, tabId) {
     s.alerted[it.id] = Date.now();
     reasons.push((it.kind === 'attendance' ? 'ATTENDANCE: ' : '') + (it.text || 'new question'));
   }
-  // Forget items no longer pending so a reopened question alerts again
+  // Forget items only after being non-pending for a while (DOM flicker must not re-alert)
+  s.gone = s.gone || {};
   const pendingIds = new Set(msg.r.items.filter(i => i.pending).map(i => i.id));
-  for (const id of Object.keys(s.alerted)) if (!pendingIds.has(id)) delete s.alerted[id];
+  for (const id of Object.keys(s.alerted)) {
+    if (pendingIds.has(id)) { delete s.gone[id]; continue; }
+    s.gone[id] = s.gone[id] || Date.now();
+    if (Date.now() - s.gone[id] > FORGET_MS) { delete s.alerted[id]; delete s.gone[id]; }
+  }
 
   const wasBaselined = !!s.baselined;
   // New entries in other sections (baseline on first scan)

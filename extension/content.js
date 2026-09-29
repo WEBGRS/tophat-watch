@@ -1,5 +1,10 @@
 // Watches the open Top Hat tab and reports pending questions/attendance to background
 (() => {
+  // Block browser auto-translate (flips DOM language, breaks section matching)
+  document.documentElement.setAttribute('translate', 'no');
+  const nt = document.createElement('meta');
+  nt.name = 'google'; nt.content = 'notranslate';
+  document.head.appendChild(nt);
   const COURSE = /^\/e\/(\d+)/;
   const LECTURE = /^\/e\/\d+\/lecture/;
 
@@ -31,7 +36,7 @@
       const title = ((sec.querySelector('[class*="SectionTitle"]') || {}).innerText || '').trim();
       const lis = [...sec.querySelectorAll('[class*="SectionList"] > li')];
       sections++;
-      if (/question|attendance/i.test(title)) lis.forEach(li => items.push(itemState(li, body)));
+      if (/question|attendance|问题|考勤/i.test(title)) lis.forEach(li => items.push(itemState(li, body)));
       else if (/present/i.test(title)) presenting = lis.length ? lis.map(l => l.innerText.trim()).join(' / ').slice(0, 120) : null;
       else lis.forEach(li => {
         // Any other section: new entries count as instructor pushes
