@@ -5,7 +5,6 @@ const DEFAULTS = {
   ntfyServer: 'https://ntfy.sh',
   sound: true,
   pushAlerts: true,
-  pushCooldownSec: 90,
 };
 
 // Optional gitignored overrides in local.json
@@ -79,31 +78,35 @@ async function markAlert(course) {
   await chrome.storage.session.set({ lastAlert });
 }
 
-// Any server push (WebSocket frame) from the instructor side
+// True when a module item (question/attendance/...) just went live for students
+async function itemOpened(msg) {
+  const p = msg.push, i = p.info || {};
+  if (!/^course:module_item:(create|update)$/.test(p.event) || i.id == null || i.module === 'discussion') return false;
+  const { pushActive = {} } = await chrome.storage.session.get('pushActive');
+  const key = `${msg.course}|${i.id}`;
+  const was = !!pushActive[key];
+  const now = i.status === 'active_visible';
+  if (now) pushActive[key] = Date.now(); else delete pushActive[key];
+  await chrome.storage.session.set({ pushActive });
+  return now && !was;
+}
+
+// Server push (WebSocket frame): alert only when an item opens; submit/close/check-in frames stay silent
 async function handlePush(msg, tabId) {
   const p = msg.push;
   const { pushLog = [] } = await chrome.storage.local.get('pushLog');
   pushLog.unshift({ t: Date.now(), course: msg.name, warmup: !!msg.warmup, ...p });
   await chrome.storage.local.set({ pushLog: pushLog.slice(0, 40) });
-  if (msg.warmup) return;
+  const opened = await itemOpened(msg);
+  if (msg.warmup || !opened) return;
   const c = await cfg();
   if (!c.enabled || !c.pushAlerts) return;
-
-  // Same kind of push within cooldown stays quiet (e.g. slide flips)
-  const key = `${msg.course}|${p.type}|${p.event}`;
-  const { pushSeen = {} } = await chrome.storage.session.get('pushSeen');
-  const now = Date.now();
-  const recent = pushSeen[key] && now - pushSeen[key] < c.pushCooldownSec * 1000;
-  pushSeen[key] = now;
-  await chrome.storage.session.set({ pushSeen });
-  if (recent) return;
 
   // Skip if the DOM scan already alerted for this course
   const { lastAlert = {} } = await chrome.storage.session.get('lastAlert');
   if (lastAlert[msg.course] && Date.now() - lastAlert[msg.course] < 8000) return;
   await markAlert(msg.course);
-  const what = p.event ? `${p.type} / ${p.event}` : p.type;
-  notify(`Top Hat push - ${msg.name}`, `Instructor pushed something (${what}). Check the tab.`, tabId, true, true);
+  notify(`Top Hat opened - ${msg.name}`, p.info.name || 'New item', tabId, true, true);
 }
 
 async function updateBadge(st) {

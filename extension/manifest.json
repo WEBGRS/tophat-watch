@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Top Hat Watch",
-  "version": "2.2",
-  "description": "Alerts you when the instructor pushes anything in Top Hat: questions, attendance, presented items.",
+  "version": "2.3",
+  "description": "Alerts you when the instructor opens something in Top Hat: questions, attendance, presented items.",
   "permissions": [
     "notifications",
     "storage",

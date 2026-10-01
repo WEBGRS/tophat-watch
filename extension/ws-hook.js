@@ -33,7 +33,10 @@
       const event = String(d.event || d.type || d.action || '');
       if (NOISE.test(type) || STUDENT_NOISE.test(event)) continue;
       if (/^meta$/i.test(type) && (d.auth !== undefined || META_NOISE.test(event))) continue;
-      window.postMessage({ __thw: 'push', host, type, event, sample: JSON.stringify(o).slice(0, 500) }, location.origin);
+      // Module item state (id/name/module/status) drives the "opened" alert
+      const pl = d.payload && typeof d.payload === 'object' ? d.payload : {};
+      const info = { id: pl.id, name: pl.display_name, module: pl.module_id, status: pl.status };
+      window.postMessage({ __thw: 'push', host, type, event, info, sample: JSON.stringify(o).slice(0, 500) }, location.origin);
     }
   }
 

@@ -32,6 +32,15 @@ def frame(obj):
     return "a" + json.dumps([json.dumps(obj)])
 
 
+def evt(event, payload=None):
+    return frame({"type": "message", "data": {"auth": False, "event": event, "payload": payload or {}}})
+
+
+def item(event, id_, name, status, module="question"):
+    return evt(event, {"display_name": name, "id": id_, "module_id": module, "status": status,
+                       "last_activated_at": None if status in ("inactive", "preview") else "2026-10-01T15:33:48+0000"})
+
+
 tmp = pathlib.Path(tempfile.mkdtemp())
 ext = tmp / "ext"
 shutil.copytree(ROOT / "extension", ext)
@@ -63,22 +72,35 @@ with sync_playwright() as p:
     ws = socks[0]
     ws.send("h")
     ws.send(frame({"type": "pong", "data": {"timestamp": 1}}))
-    ws.send(frame({"type": "slide", "data": {"event": "changed"}}))          # 1: generic push alert
+    # Lifecycle noise (real event names): must stay silent
+    for ev in ("show_course_info", "close_course_info", "patch:tree{1}", "close_attendance"):
+        ws.send(evt(ev))
+    ws.send(evt("general_location_update", {"attendance_id": "9", "attended": True}))
+    ws.send(item("course:module_item:create", 500, "Push Only Q", "inactive"))
+    ws.send(item("course:module_item:update", 500, "Push Only Q", "preview"))
     page.wait_for_timeout(4500)
-    ws.send(frame({"type": "slide", "data": {"event": "changed"}}))          # cooldown: silent
+    ws.send(item("course:module_item:update", 500, "Push Only Q", "active_visible"))   # 1: opened
     page.wait_for_timeout(4500)
-    ws.send(frame({"type": "item", "data": {"event": "opened"}}))            # 2: question (push deduped)
-    page.evaluate("addQ()")
+    ws.send(item("course:module_item:update", 500, "Push Only Q", "active_visible"))   # repeat: silent
+    page.wait_for_timeout(4500)
+    ws.send(item("course:module_item:update", 500, "Push Only Q", "visible"))          # closed: silent
+    page.wait_for_timeout(4500)
+    ws.send(item("course:module_item:update", 500, "Push Only Q", "active_visible"))   # 2: reopened
+    page.wait_for_timeout(9000)
+    # Backchannel module item + classmate posts: must stay silent
+    ws.send(item("course:module_item:update", 600, "Lecture Backchannel", "active_visible", "discussion"))
+    page.wait_for_timeout(4500)
+    ws.send(item("course:module_item:update", 42, "Pick the recurrence", "active_visible"))  # push deduped by DOM
+    page.evaluate("addQ()")                                                  # 3: question (DOM)
     page.wait_for_timeout(5000)
-    ws.send(frame({"type": "item", "data": {"event": "published"}}))         # 3: new material (push deduped)
-    page.evaluate("addM()")
+    ws.send(frame({"type": "item", "data": {"event": "published"}}))         # unknown push: silent
+    page.evaluate("addM()")                                                  # 4: new material (DOM)
     page.wait_for_timeout(5000)
-    # Discussion item + classmate posts (real frame shape): must stay silent
     page.evaluate("addD()")
     for ev in ("discussion:response:added", "discussion:response:updated"):
-        ws.send(frame({"type": "message", "data": {"auth": False, "event": ev, "payload": {"discussion": 77}}}))
+        ws.send(evt(ev, {"discussion": 77}))
     page.wait_for_timeout(5000)
-    page.evaluate("setP('Lecture 5 - Poll 2')")                              # 4: presenting changed
+    page.evaluate("setP('Lecture 5 - Poll 2')")                              # 5: presenting changed
     page.wait_for_timeout(5000)
     notes = sw.evaluate("self.__notes")
     log = sw.evaluate("chrome.storage.local.get('pushLog').then(v => v.pushLog.map(p => p.type + '/' + p.event + (p.warmup ? ' warmup' : '')))")
@@ -87,7 +109,7 @@ with sync_playwright() as p:
 print("pushLog:", log)
 for n in notes:
     print("NOTE:", n)
-expect = ["Top Hat push", "Top Hat question", "Top Hat new item", "Top Hat presenting"]
+expect = ["Top Hat opened", "Top Hat opened", "Top Hat question", "Top Hat new item", "Top Hat presenting"]
 ok = len(notes) == len(expect) and all(n.startswith(e) for n, e in zip(notes, expect))
 print("PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

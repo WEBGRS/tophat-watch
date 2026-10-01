@@ -81,10 +81,10 @@
     if (e.source !== window || !e.data || e.data.__thw !== 'push') return;
     const m = location.pathname.match(COURSE);
     if (!m) return;
-    const { host, type, event, sample } = e.data;
+    const { host, type, event, info, sample } = e.data;
     // Frames in the first seconds are initial state, not new pushes
     send({ type: 'push', course: m[1], name: courseName(), url: location.href,
-      push: { host, type, event, sample }, warmup: Date.now() - loadedAt < 8000 });
+      push: { host, type, event, info, sample }, warmup: Date.now() - loadedAt < 8000 });
   });
 
   let timer;
